@@ -4,6 +4,8 @@
 BINARY_NAME=auth-service
 MIGRATIONS_DIR=./migrations
 DATABASE_URL=postgres://auth_service:auth_service_password@localhost:5432/auth_service_db?sslmode=disable
+GOBIN=$(shell go env GOPATH)/bin
+MIGRATE=$(GOBIN)/migrate
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -19,7 +21,7 @@ build: ## Build the application
 	go build -o bin/$(BINARY_NAME) ./cmd/server
 
 run: ## Run the application
-	go run ./cmd/server
+	@export $$(grep -v '^#' .env | xargs) && go run ./cmd/server
 
 test: ## Run tests
 	go test -v -race -coverprofile=coverage.out ./...
@@ -39,21 +41,21 @@ docker-logs: ## Show Docker container logs
 	docker-compose logs -f
 
 migrate-install: ## Install migrate tool
-	@which migrate > /dev/null || (echo "Installing migrate tool..." && go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest)
+	@test -f $(MIGRATE) || (echo "Installing migrate tool..." && go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest)
 
 migrate-up: migrate-install ## Run database migrations
-	migrate -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" up
+	$(MIGRATE) -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" up
 
 migrate-down: migrate-install ## Rollback database migrations
-	migrate -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" down
+	$(MIGRATE) -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" down
 
 migrate-create: ## Create a new migration (usage: make migrate-create NAME=create_table)
 	@if [ -z "$(NAME)" ]; then echo "Usage: make migrate-create NAME=create_table"; exit 1; fi
-	migrate create -ext sql -dir $(MIGRATIONS_DIR) -seq $(NAME)
+	$(MIGRATE) create -ext sql -dir $(MIGRATIONS_DIR) -seq $(NAME)
 
 migrate-force: migrate-install ## Force migration version (usage: make migrate-force VERSION=1)
 	@if [ -z "$(VERSION)" ]; then echo "Usage: make migrate-force VERSION=1"; exit 1; fi
-	migrate -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" force $(VERSION)
+	$(MIGRATE) -path $(MIGRATIONS_DIR) -database "$(DATABASE_URL)" force $(VERSION)
 
 lint: ## Run linter
 	golangci-lint run
